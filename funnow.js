@@ -24,7 +24,7 @@
       minute: '00',
     },
 
-    VERSION: 'v1.4.5',
+    VERSION: 'v1.5.0',
   };
 
   /* 若已載入過，直接切換顯示 / 隱藏面板 */
@@ -828,7 +828,12 @@
      ['store', '館別確認（自動跑完整館，換館停）'],
      ['full', '全自動（含跨館別，不停）']].forEach(([v, t]) => UI.modeSel.appendChild(h('option', { value: v }, t)));
     UI.modeSel.value = STATE.mode;
-    UI.modeSel.addEventListener('change', () => { STATE.mode = UI.modeSel.value; updateStartBtn(); });
+    UI.modeSel.addEventListener('change', () => { STATE.mode = UI.modeSel.value; updateFieldVisibility(); updateStartBtn(); });
+    UI.modeHint = h('div', { style: { fontSize: '12px', color: '#666', margin: '2px 0 8px', lineHeight: '1.5' } });
+
+    UI.storeField = h('div', {}, [h('div', { text: '館別', style: { fontWeight: '700' } }), UI.storeSel]);
+    UI.projField = h('div', {}, [h('div', { text: '專案', style: { fontWeight: '700' } }), UI.projSel]);
+    UI.chanField = h('div', {}, [h('div', { text: '頻道', style: { fontWeight: '700' } }), UI.chanSel]);
 
     UI.storeSel.addEventListener('change', () => { fillProjects(); refreshSteps(); });
     UI.projSel.addEventListener('change', () => { fillChannels(); refreshSteps(); });
@@ -836,9 +841,8 @@
 
     const body = h('div', { style: C.body }, [
       h('div', { text: '模式', style: { fontWeight: '700' } }), UI.modeSel,
-      h('div', { text: '館別', style: { fontWeight: '700' } }), UI.storeSel,
-      h('div', { text: '專案', style: { fontWeight: '700' } }), UI.projSel,
-      h('div', { text: '頻道', style: { fontWeight: '700' } }), UI.chanSel,
+      UI.modeHint,
+      UI.storeField, UI.projField, UI.chanField,
       UI.detectBtn,
       h('hr', { style: { margin: '10px 0', border: '0', borderTop: '1px solid #eee' } }),
       h('div', { text: '要建立的時段（目前選定群組）', style: { fontWeight: '700' } }),
@@ -859,8 +863,25 @@
     document.body.appendChild(wrap);
     UI.wrap = wrap;
     UI.body = body;
+    updateFieldVisibility();
     updateStartBtn();
     return wrap;
+  }
+
+  // 依模式只顯示需要的欄位，並顯示說明
+  function updateFieldVisibility() {
+    const m = STATE.mode;
+    const show = (el, on) => { if (el) el.style.display = on ? 'block' : 'none'; };
+    show(UI.storeField, m === 'step' || m === 'project');
+    show(UI.projField, m === 'step');
+    show(UI.chanField, m === 'step');
+    const hints = {
+      step: '逐步：請停在「目標專案頁」執行，只處理下方選定的那一組；每格填好會停下，由你按頁面「儲存」再按〔下一步〕。',
+      project: '專案確認：請先切到「目標館別」（該館任一專案頁即可），會自動輪流做完該館所有專案，每個專案做完停一下。',
+      store: '館別確認：依主檔自動跑完「所有館別」（會自動切換館別），每換一個館別停一下。可從任何頁面開始。',
+      full: '全自動：依主檔自動跑完所有館別與專案，中途不停。可從任何頁面開始。',
+    };
+    if (UI.modeHint) UI.modeHint.textContent = hints[m] || '';
   }
 
   function makeDraggable(el, handle) {
@@ -968,6 +989,15 @@
     STATE.running = true;
     setEngineButtons(true);
     try {
+      if (mode === 'project' && UI.storeSel.value && !storeMatches(UI.storeSel.value)) {
+        throw new Error('目前畫面不是「' + UI.storeSel.value + '」館別；「專案確認」不會自動換館別，請先在右上切到該館別再執行');
+      }
+      if (mode === 'step' && UI.projSel.value) {
+        const want = keyNorm(UI.projSel.value);
+        if (keyNorm(detectProjectName()) !== want) {
+          log('⚠ 目前畫面專案似乎不是「' + UI.projSel.value + '」；逐步模式會填「目前畫面」的專案，請先確認。', 'err');
+        }
+      }
       const stores = (mode === 'store' || mode === 'full') ? Object.keys(STATE.tree) : [UI.storeSel.value];
       for (let si = 0; si < stores.length; si++) {
         const store = stores[si];
