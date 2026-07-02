@@ -24,7 +24,7 @@
       minute: '00',
     },
 
-    VERSION: 'v1.4.4',
+    VERSION: 'v1.4.5',
   };
 
   /* 若已載入過，直接切換顯示 / 隱藏面板 */
@@ -393,22 +393,30 @@
     if (!field) throw new Error('找不到專案選擇框');
     const menuId = field.getAttribute('aria-owns')
       || (field.querySelector('[aria-owns]') && field.querySelector('[aria-owns]').getAttribute('aria-owns'));
-    await safeClick(field, 600);
-    // 只在該 select 專屬選單 / 浮層內找（排除左側導覽的 .v-list）
-    const menu = await waitFor(() => {
+    // 找選單：優先用 aria-owns 的專屬選單；否則找浮層內含選項的 v-list（排除左側導覽）
+    const findMenu = () => {
       let m = menuId ? document.getElementById(menuId) : null;
-      if (!m) m = visible('.v-overlay__content').filter((o) => !o.closest('#fn-panel')).find((o) => o.querySelector('.v-list-item, [role="option"]'));
-      return (m && isVisible(m) && m.querySelector('.v-list-item, [role="option"]')) ? m : null;
-    }, 6000);
-    if (!menu) { stashOverlayHTML(visible('.v-overlay__content').filter((o) => !o.closest('#fn-panel')).pop()); throw new Error('專案清單沒展開'); }
+      if (m && isVisible(m) && m.querySelector('.v-list-item, [role="option"]')) return m;
+      m = realOverlays().find((o) => o.querySelector('.v-list-item, [role="option"]'));
+      return (m && m.querySelector('.v-list-item, [role="option"]')) ? m : null;
+    };
+    // Vuetify 下拉常需完整滑鼠事件才會展開；重試數次
+    const clickTargets = [field, field.querySelector('.v-field__input'), field.querySelector('.v-select__selection'), document.querySelector('.base-select')].filter(Boolean);
+    let menu = null;
+    for (let attempt = 0; attempt < 4 && !menu; attempt++) {
+      await firmClick(clickTargets[attempt % clickTargets.length], 450);
+      menu = await waitFor(findMenu, 2500, 150);
+    }
+    if (!menu) { stashOverlayHTML(realOverlays().pop() || (menuId ? document.getElementById(menuId) : null)); throw new Error('專案清單沒展開'); }
+    STATE.lastOverlayHTML = dumpEl(menu, 3800); // 記下選單 HTML（供比對失敗時診斷）
     const items = [...menu.querySelectorAll('.v-list-item, [role="option"]')].filter(isVisible);
     const cands = items.filter((it) => { const t = keyNorm(it.textContent); return t.includes(want) || want.includes(t); });
     const target = cands.find((it) => {
       const ch = channelFromImgs([...it.querySelectorAll('img')].map((i) => i.getAttribute('src') || ''));
       return !channel || channel === '(未填)' || ch === channel;
     }) || cands[0];
-    if (!target) { stashOverlayHTML(menu); throw new Error('清單找不到專案：' + project + '（' + channel + '）'); }
-    await safeClick(target, 1000);
+    if (!target) { throw new Error('清單找不到專案：' + project + '（' + channel + '）（已把選單HTML記入診斷）'); }
+    await firmClick(target, 1000);
     await waitFor(() => { const n = keyNorm(detectProjectName()); return (n === want || n.includes(want)) ? true : null; }, 5000);
   }
 
