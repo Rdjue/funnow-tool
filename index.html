@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FUNNOW 一鍵上架工具 — 使用說明</title>
+<style>
+  :root{
+    --brand:#e2534a; --brand-d:#c53f37; --ink:#222; --muted:#666;
+    --line:#eadfdf; --bg:#fbf7f6; --code:#2d2d2d; --ok:#2e9e5b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.75 "Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;
+  }
+  .wrap{max-width:820px; margin:0 auto; padding:0 20px 80px}
+  header{
+    background:linear-gradient(135deg,var(--brand),var(--brand-d));
+    color:#fff; padding:36px 20px; text-align:center; margin-bottom:8px;
+  }
+  header h1{margin:0 0 6px; font-size:26px}
+  header .sub{opacity:.92; font-size:14px}
+  .badge{display:inline-block; background:rgba(255,255,255,.2); border-radius:20px;
+    padding:2px 12px; font-size:12px; margin-top:10px}
+  h2{
+    margin:38px 0 12px; padding-bottom:8px; border-bottom:2px solid var(--line);
+    font-size:20px; color:var(--brand-d);
+  }
+  h2 .n{
+    display:inline-flex; width:28px; height:28px; margin-right:8px; border-radius:50%;
+    background:var(--brand); color:#fff; font-size:15px; align-items:center; justify-content:center; vertical-align:2px;
+  }
+  ol,ul{padding-left:22px} li{margin:7px 0}
+  .card{background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin:14px 0;
+    box-shadow:0 2px 8px rgba(0,0,0,.03)}
+  .note{background:#fff8e6; border-left:4px solid #f0b400; border-radius:8px; padding:12px 16px; margin:14px 0}
+  .warn{background:#fdecea; border-left:4px solid var(--brand); border-radius:8px; padding:12px 16px; margin:14px 0}
+  .ok{background:#eafaf0; border-left:4px solid var(--ok); border-radius:8px; padding:12px 16px; margin:14px 0}
+  code{background:#f0ecec; padding:1px 6px; border-radius:5px; font-size:14px}
+  kbd{background:#fff; border:1px solid #bbb; border-bottom-width:2px; border-radius:5px; padding:1px 7px; font-size:13px; font-family:inherit}
+  .bm-box{position:relative}
+  textarea.bm{width:100%; height:96px; resize:vertical; font:12px/1.5 Consolas,monospace;
+    padding:12px; border:1px dashed var(--brand); border-radius:10px; background:#fff; color:#444}
+  .btn{display:inline-block; background:var(--brand); color:#fff; border:none; border-radius:8px;
+    padding:9px 16px; font-size:14px; font-weight:700; cursor:pointer; margin-top:8px}
+  .btn:hover{background:var(--brand-d)}
+  .step{display:flex; gap:12px; align-items:flex-start; margin:12px 0}
+  .step .dot{flex:none; width:26px; height:26px; border-radius:50%; background:var(--brand); color:#fff;
+    font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; margin-top:2px}
+  a{color:var(--brand-d)}
+  .pill{display:inline-block; background:#f0ecec; border-radius:6px; padding:1px 8px; font-size:13px; margin:0 2px}
+  footer{text-align:center; color:var(--muted); font-size:13px; margin-top:50px}
+  table{border-collapse:collapse; width:100%; margin:10px 0}
+  th,td{border:1px solid var(--line); padding:8px 10px; text-align:left; font-size:14px}
+  th{background:#faf3f2}
+</style>
+</head>
+<body>
+<header>
+  <h1>FUNNOW 一鍵上架工具</h1>
+  <div class="sub">自動填入平日／假日／特殊設定，每步暫停由你確認後儲存</div>
+  <div class="badge">工具版本 v1.3.0 ・ 最後更新 2026-07-02</div>
+</header>
+
+<div class="wrap">
+
+  <div class="ok">
+    <strong>這個工具能做什麼？</strong><br>
+    在 FUNNOW 後台的專案頁按一下書籤，它會依「線上主檔」的設定值，自動幫你把
+    <b>循環設定（平日／假日）</b> 和 <b>特殊設定</b> 一路填好。每填好一個時段會<b>停住</b>，
+    讓你檢查沒問題後，自己按 FUNNOW 的「儲存」。
+  </div>
+
+  <h2><span class="n">1</span>安裝書籤（只做一次）</h2>
+  <div class="card">
+    <ol>
+      <li>按 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> 打開瀏覽器的「書籤列」。</li>
+      <li>對書籤列空白處按右鍵 →「<b>加入網頁…／新增書籤</b>」。</li>
+      <li><b>名稱</b>填：<code>FUNNOW一鍵上架</code></li>
+      <li><b>網址</b>貼上下面這一整段（可先按「複製」）：</li>
+    </ol>
+    <div class="bm-box">
+      <textarea class="bm" id="bm" readonly>javascript:(function(){if(window.__FUNNOW__&&window.__FUNNOW__.panel){window.__FUNNOW__.toggle();return;}var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/Rdjue/funnow-tool@main/funnow.js?t='+Date.now();s.onerror=function(){alert('載入主程式失敗，請檢查網址或網路');};document.body.appendChild(s);})();</textarea>
+      <button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('bm').value);this.textContent='已複製 ✓';setTimeout(()=>this.textContent='複製書籤網址',1500)">複製書籤網址</button>
+    </div>
+    <div class="note">小技巧：你也可以直接把這顆按鈕
+      <a href="javascript:(function(){if(window.__FUNNOW__&&window.__FUNNOW__.panel){window.__FUNNOW__.toggle();return;}var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/Rdjue/funnow-tool@main/funnow.js?t='+Date.now();s.onerror=function(){alert('載入主程式失敗，請檢查網址或網路');};document.body.appendChild(s);})();"
+      style="background:var(--brand);color:#fff;padding:3px 10px;border-radius:6px;text-decoration:none;font-weight:700">FUNNOW一鍵上架</a>
+      用滑鼠<strong>拖曳到書籤列</strong>，就會自動變成書籤（不同瀏覽器不一定支援，不行就用上面複製貼上的方式）。</div>
+  </div>
+
+  <h2><span class="n">2</span>每天怎麼用</h2>
+  <div class="card">
+    <div class="step"><div class="dot">1</div><div>在 FUNNOW 後台選好 <b>館別 → 專案</b>，停在該<b>專案頁</b>即可。</div></div>
+    <div class="step"><div class="dot">2</div><div>按書籤 <span class="pill">FUNNOW一鍵上架</span> → 畫面右下角出現操作面板。</div></div>
+    <div class="step"><div class="dot">3</div><div>面板會自動判讀目前的<b>館別／專案／頻道</b>，並列出「要建立的時段」。<br>
+      若沒自動帶出，就用面板上三個下拉選單手動選。</div></div>
+    <div class="step"><div class="dot">4</div><div>按 <span class="pill">▶ 開始</span> → 自動打開「循環設定」並填好 <b>平日</b> → <b>停住</b>。</div></div>
+    <div class="step"><div class="dot">5</div><div><b>檢查畫面沒問題</b> → 按 FUNNOW 頁面上的「<b>儲存</b>」。</div></div>
+    <div class="step"><div class="dot">6</div><div>回面板按 <span class="pill">下一步 ▶</span> → 自動填 <b>假日</b> → 檢查 → 儲存 → 下一步 → <b>特殊</b> → 檢查 → 儲存。</div></div>
+    <div class="step"><div class="dot">7</div><div>顯示完成 → 換下一個專案，重複第 2～6 步。</div></div>
+
+    <div class="ok" style="margin-top:16px">
+      ✅ <b>不用特意切換到「列表」檢視</b>——只要停在該專案頁下，工具就能正常運作。
+    </div>
+
+    <p style="margin:14px 0 4px"><b>面板按鈕說明：</b></p>
+    <table>
+      <tr><th>按鈕</th><th>用途</th></tr>
+      <tr><td>下一步 ▶</td><td>這一步存好了，進到下一個時段</td></tr>
+      <tr><td>略過此步</td><td>跳過目前這個時段</td></tr>
+      <tr><td>重填此步</td><td>這步填錯或出錯，重來一次</td></tr>
+      <tr><td>↻ 重新載入主檔</td><td>主檔（Google Sheet）改過後，按這個抓最新資料</td></tr>
+      <tr><td>🩺 匯出診斷</td><td>出問題時按它，把產生的文字回傳窗口協助排查</td></tr>
+    </table>
+  </div>
+
+  <h2><span class="n">3</span>資料主檔（Google Sheet）</h2>
+  <div class="card">
+    <p>工具要填的所有設定值（價格、星期、日期、特殊場次…）都放在這份線上主檔：</p>
+    <p>🔗 <a href="https://docs.google.com/spreadsheets/d/1oerEEw3MB65_qKRB2q1B9Da8T0POEjO73NrOf41lXZs/edit?gid=0#gid=0" target="_blank">FUNNOW 上架主檔（Google Sheet）</a></p>
+    <div class="warn">
+      ✏️ <b>只開放給 <code>lisayu@goldenraintree.tw</code> 修改。</b>
+      其他人可以檢視，但要新增／修改設定值，請洽 lisayu 或由其統一維護。
+    </div>
+    <div class="note">
+      🔄 <b>主檔改過之後</b>：回到工具面板按一次「<b>↻ 重新載入主檔</b>」，才會抓到最新資料。<br>
+      （Google 發佈更新偶爾會慢 1～2 分鐘，若沒更新請稍等再按一次。）
+    </div>
+  </div>
+
+  <h2><span class="n">4</span>注意事項</h2>
+  <div class="card">
+    <ul>
+      <li><b>一定要自己看過再按「儲存」</b>：工具只負責幫你把欄位填好，存檔由你確認，避免填錯直接上架。</li>
+      <li><b>工具有更新時</b>：先把後台頁面按 <kbd>F5</kbd> 重新整理，再按書籤，才會載到最新版本。</li>
+      <li><b>出問題時</b>：按面板的「🩺 匯出診斷」，把文字回傳窗口，就能快速協助排查。</li>
+      <li>本頁網址固定，內容更新後看同一個網址即可。</li>
+    </ul>
+  </div>
+
+  <footer>FUNNOW 一鍵上架工具 ・ 內部使用文件</footer>
+</div>
+</body>
+</html>
