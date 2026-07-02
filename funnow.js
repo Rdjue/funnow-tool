@@ -24,7 +24,7 @@
       minute: '00',
     },
 
-    VERSION: 'v1.5.0',
+    VERSION: 'v1.5.1',
   };
 
   /* 若已載入過，直接切換顯示 / 隱藏面板 */
@@ -426,23 +426,33 @@
     return cur.includes(storeCore(store)) || storeCore(store).includes(cur.replace(/^蟬說[:：]?/, ''));
   };
   async function switchStore(store) {
-    const storeBtn = document.querySelector('header [aria-haspopup="menu"]')
-      || [...document.querySelectorAll('header button')].filter(isVisible).pop();
-    if (!storeBtn) throw new Error('找不到館別選單按鈕');
-    await safeClick(storeBtn, 700);
-    const sw = await waitFor(() => visible('*').find((el) => !el.closest('#fn-panel') && norm(el.textContent) === '切換分店' && el.children.length <= 1), 5000);
-    if (!sw) { stashOverlayHTML(visible('.v-overlay__content').pop()); throw new Error('找不到「切換分店」'); }
-    await safeClick(sw, 900);
     const core = store.replace(/^蟬說\s*[：:]\s*/, '').trim();
-    const search = await waitFor(() => visible('input').find((i) => /店名|分店|搜尋/.test(i.getAttribute('placeholder') || '')), 5000);
-    if (search) { setInputValue(search, core); await sleep(1000); }
+    // 1) 開右上館別選單（排除 兌換/促銷/預訂；優先含店名/：/｜者，否則取最後一個 menu 按鈕）
+    const menuBtns = [...document.querySelectorAll('header [aria-haspopup="menu"], header button')].filter(isVisible);
+    let storeBtn = menuBtns.find((b) => /[：｜]/.test(b.textContent) && !/兌換|促銷|預訂/.test(b.textContent))
+      || [...document.querySelectorAll('header [aria-haspopup="menu"]')].filter(isVisible).pop()
+      || menuBtns[menuBtns.length - 1];
+    if (!storeBtn) throw new Error('找不到館別選單按鈕');
+    await firmClick(storeBtn, 700);
+    // 2) 點「切換分店」
+    const sw = await waitFor(() => visible('*').find((el) => !el.closest('#fn-panel') && norm(el.textContent) === '切換分店' && el.children.length <= 1), 5000);
+    if (!sw) { STATE.lastOverlayHTML = dumpEl(realOverlays().pop(), 3800); throw new Error('選單中找不到「切換分店」（已記錄HTML）'); }
+    await firmClick(sw, 900);
+    // 3) 分店清單視窗 → 記錄 HTML、輸入店名搜尋
+    const dlg = await waitFor(() => realOverlays().find((o) => /切換分店|店名|選擇/.test(o.textContent)) || realOverlays().pop(), 5000);
+    if (dlg) STATE.lastOverlayHTML = dumpEl(dlg, 3800);
+    const search = visible('input').find((i) => /店名|分店|搜尋|店/.test(i.getAttribute('placeholder') || ''));
+    if (search) { setInputValue(search, core); await sleep(1200); }
+    // 4) 對應列的「選擇」（若搜尋後只剩一列就直接選）
     const target = await waitFor(() => {
       const chooses = visible('button, .v-btn').filter((b) => norm(b.textContent) === '選擇');
-      return chooses.find((b) => { const box = b.closest('div'); const t = box ? keyNorm(box.textContent) : ''; return t.includes(keyNorm(store)) || t.includes(keyNorm(core)); }) || null;
+      return chooses.find((b) => { const box = b.closest('div'); const t = box ? keyNorm(box.textContent) : ''; return t.includes(keyNorm(store)) || t.includes(keyNorm(core)); })
+        || (chooses.length === 1 ? chooses[0] : null);
     }, 6000);
-    if (!target) { stashOverlayHTML(visible('.v-overlay__content').pop()); throw new Error('切換分店清單找不到：' + store); }
-    await safeClick(target, 1500);
-    await waitFor(() => (keyNorm(detectStore()).includes(keyNorm(core)) ? true : null), 8000);
+    if (!target) { if (dlg) STATE.lastOverlayHTML = dumpEl(dlg, 3800); throw new Error('切換分店清單找不到：' + store + '（已記錄HTML）'); }
+    await firmClick(target, 1500);
+    const ok = await waitFor(() => (keyNorm(detectStore()).includes(keyNorm(core)) ? true : null), 8000);
+    if (!ok) log('已點選分店，但偵測館別未即時更新（續行）', 'err');
   }
 
   /* ================================================================== *
