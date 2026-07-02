@@ -24,7 +24,7 @@
       minute: '00',
     },
 
-    VERSION: 'v1.4.0',
+    VERSION: 'v1.4.1',
   };
 
   /* 若已載入過，直接切換顯示 / 隱藏面板 */
@@ -364,18 +364,27 @@
   }
 
   async function switchProject(project, channel) {
-    const activator = document.querySelector('.base-select .v-field')
-      || document.querySelector('.base-select')
-      || (projectSelectionEl() && projectSelectionEl().closest('.v-field'));
-    if (!activator) throw new Error('找不到專案選擇框');
-    await safeClick(activator, 700);
+    const want = keyNorm(project);
+    // 已在目標專案（且頻道相符）就不用切
+    if (keyNorm(detectProjectName()) === want) {
+      const curCh = detectChannel();
+      if (!channel || channel === '(未填)' || curCh === channel) { log('（已在目標專案，略過切換）'); return; }
+    }
+    const field = document.querySelector('.base-select .v-field[role="combobox"]')
+      || document.querySelector('.base-select .v-field')
+      || document.querySelector('.base-select');
+    if (!field) throw new Error('找不到專案選擇框');
+    const menuId = field.getAttribute('aria-owns')
+      || (field.querySelector('[aria-owns]') && field.querySelector('[aria-owns]').getAttribute('aria-owns'));
+    await safeClick(field, 600);
+    // 只在該 select 專屬選單 / 浮層內找（排除左側導覽的 .v-list）
     const menu = await waitFor(() => {
-      const lists = visible('.v-overlay__content .v-list, .v-list, [role="listbox"]').filter((l) => !l.closest('#fn-panel'));
-      return lists.find((l) => l.querySelector('.v-list-item, [role="option"]')) || null;
+      let m = menuId ? document.getElementById(menuId) : null;
+      if (!m) m = visible('.v-overlay__content').filter((o) => !o.closest('#fn-panel')).find((o) => o.querySelector('.v-list-item, [role="option"]'));
+      return (m && isVisible(m) && m.querySelector('.v-list-item, [role="option"]')) ? m : null;
     }, 6000);
     if (!menu) { stashOverlayHTML(visible('.v-overlay__content').filter((o) => !o.closest('#fn-panel')).pop()); throw new Error('專案清單沒展開'); }
     const items = [...menu.querySelectorAll('.v-list-item, [role="option"]')].filter(isVisible);
-    const want = keyNorm(project);
     const cands = items.filter((it) => { const t = keyNorm(it.textContent); return t.includes(want) || want.includes(t); });
     const target = cands.find((it) => {
       const ch = channelFromImgs([...it.querySelectorAll('img')].map((i) => i.getAttribute('src') || ''));
@@ -383,7 +392,7 @@
     }) || cands[0];
     if (!target) { stashOverlayHTML(menu); throw new Error('清單找不到專案：' + project + '（' + channel + '）'); }
     await safeClick(target, 1000);
-    await waitFor(() => { const n = keyNorm(detectProjectName()); return n === want || n.includes(want) ? true : null; }, 5000);
+    await waitFor(() => { const n = keyNorm(detectProjectName()); return (n === want || n.includes(want)) ? true : null; }, 5000);
   }
 
   const storeCore = (s) => keyNorm(s).replace(/^蟬說[:：]?/, '');
