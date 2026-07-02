@@ -24,7 +24,7 @@
       minute: '00',
     },
 
-    VERSION: 'v1.4.3',
+    VERSION: 'v1.4.4',
   };
 
   /* 若已載入過，直接切換顯示 / 隱藏面板 */
@@ -50,6 +50,12 @@
   };
   const visible = (sel, root = document) =>
     [...root.querySelectorAll(sel)].filter(isVisible);
+
+  // 提示條（儲存成功 toast）不是對話框，須排除
+  const isToast = (o) => !!(o && ((o.classList && o.classList.contains('v-snackbar__wrapper')) || (o.closest && o.closest('.v-snackbar'))));
+  // 真正的對話框/浮層（排除面板自身與 toast）
+  const realOverlays = () => visible('.v-overlay__content, [role="dialog"]')
+    .filter((o) => !o.closest('#fn-panel') && !isToast(o));
 
   const waitFor = async (getter, timeout = 8000, interval = 150) => {
     const start = Date.now();
@@ -299,14 +305,13 @@
     let root = getEditorRoot();
     if (hasNameInput(root)) return root;
 
-    const findModal = () => visible('.v-overlay__content, [role="dialog"]')
-      .filter((o) => !o.closest('#fn-panel'))
+    const findModal = () => realOverlays()
       .find((o) => new RegExp(label).test(o.textContent) && !hasNameInput(o));
 
     let modal = findModal();
     if (!modal) {
       // 若有「不相干」的彈窗開著（例如要開特殊、但循環清單還開著），先關掉以免擋住按鈕
-      const others = visible('.v-overlay__content, [role="dialog"]').filter((o) => !o.closest('#fn-panel'));
+      const others = realOverlays();
       if (others.length) await closeAnyDialog();
       const btn = visible('button.setting-btn, button, .v-btn')
         .find((b) => norm(b.textContent) === label);
@@ -363,7 +368,7 @@
 
   async function closeAnyDialog() {
     for (let i = 0; i < 4; i++) {
-      const ovs = visible('.v-overlay__content, [role="dialog"]').filter((o) => !o.closest('#fn-panel'));
+      const ovs = realOverlays();
       if (!ovs.length) return true;
       const ov = ovs[ovs.length - 1];
       const btn = visible('button, .v-btn', ov).find((b) => norm(b.textContent) === '取消')
@@ -372,7 +377,7 @@
       if (btn) await safeClick(btn, 500);
       else { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true })); await sleep(400); }
     }
-    return !visible('.v-overlay__content, [role="dialog"]').filter((o) => !o.closest('#fn-panel')).length;
+    return !realOverlays().length;
   }
 
   async function switchProject(project, channel) {
