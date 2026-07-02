@@ -24,7 +24,7 @@
       minute: '00',
     },
 
-    VERSION: 'v1.4.1',
+    VERSION: 'v1.4.2',
   };
 
   /* 若已載入過，直接切換顯示 / 隱藏面板 */
@@ -294,6 +294,9 @@
 
     let modal = findModal();
     if (!modal) {
+      // 若有「不相干」的彈窗開著（例如要開特殊、但循環清單還開著），先關掉以免擋住按鈕
+      const others = visible('.v-overlay__content, [role="dialog"]').filter((o) => !o.closest('#fn-panel'));
+      if (others.length) await closeAnyDialog();
       const btn = visible('button.setting-btn, button, .v-btn')
         .find((b) => norm(b.textContent) === label);
       if (!btn) throw new Error('找不到「' + label + '」按鈕');
@@ -967,7 +970,6 @@
               redo = false;
               try {
                 if (mode === 'step') markStep(ki, '⏳');
-                else await closeAnyDialog();
                 const root = slot.type === 'cyclic' ? await openCyclicDialog() : await openSpecialDialog();
                 await (slot.type === 'cyclic' ? fillCyclic : fillSpecial)(root, slot);
                 if (mode === 'step') {
