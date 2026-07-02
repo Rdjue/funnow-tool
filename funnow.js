@@ -24,7 +24,7 @@
       minute: '00',
     },
 
-    VERSION: 'v1.5.1',
+    VERSION: 'v1.5.2',
   };
 
   /* 若已載入過，直接切換顯示 / 隱藏面板 */
@@ -313,9 +313,9 @@
       // 若有「不相干」的彈窗開著（例如要開特殊、但循環清單還開著），先關掉以免擋住按鈕
       const others = realOverlays();
       if (others.length) await closeAnyDialog();
-      const btn = visible('button.setting-btn, button, .v-btn')
-        .find((b) => norm(b.textContent) === label);
-      if (!btn) throw new Error('找不到「' + label + '」按鈕');
+      // 有耐心等按鈕出現（換館別/專案後頁面可能還在載入）
+      const btn = await waitFor(() => visible('button.setting-btn, button, .v-btn').find((b) => norm(b.textContent) === label), 10000);
+      if (!btn) throw new Error('找不到「' + label + '」按鈕（頁面可能尚未載入完成）');
       await safeClick(btn, 900);
       // 等：表單直接出現、或清單彈窗出現
       const got = await waitFor(() => {
@@ -387,10 +387,10 @@
       const curCh = detectChannel();
       if (!channel || channel === '(未填)' || curCh === channel) { log('（已在目標專案，略過切換）'); return; }
     }
-    const field = document.querySelector('.base-select .v-field[role="combobox"]')
+    const field = await waitFor(() => document.querySelector('.base-select .v-field[role="combobox"]')
       || document.querySelector('.base-select .v-field')
-      || document.querySelector('.base-select');
-    if (!field) throw new Error('找不到專案選擇框');
+      || document.querySelector('.base-select'), 8000);
+    if (!field) throw new Error('找不到專案選擇框（頁面可能尚未載入完成）');
     const menuId = field.getAttribute('aria-owns')
       || (field.querySelector('[aria-owns]') && field.querySelector('[aria-owns]').getAttribute('aria-owns'));
     // 找選單：優先用 aria-owns 的專屬選單；否則找浮層內含選項的 v-list（排除左側導覽）
@@ -453,6 +453,9 @@
     await firmClick(target, 1500);
     const ok = await waitFor(() => (keyNorm(detectStore()).includes(keyNorm(core)) ? true : null), 8000);
     if (!ok) log('已點選分店，但偵測館別未即時更新（續行）', 'err');
+    // 等新館別的方案頁載入（出現 循環/特殊設定 按鈕或專案選擇框）
+    await waitFor(() => document.querySelector('.base-select') || visible('button.setting-btn').some((b) => /循環設定|特殊設定/.test(b.textContent)), 10000);
+    await sleep(1200);
   }
 
   /* ================================================================== *
