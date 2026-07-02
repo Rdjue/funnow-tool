@@ -24,7 +24,7 @@
       minute: '00',
     },
 
-    VERSION: 'v1.2.0',
+    VERSION: 'v1.3.0',
   };
 
   /* 若已載入過，直接切換顯示 / 隱藏面板 */
@@ -711,8 +711,8 @@
       UI.log,
     ]);
 
-    const closeBtn = h('span', { style: { cursor: 'pointer', fontSize: '18px' },
-      onclick: () => window.__FUNNOW__.toggle() }, '—');
+    const closeBtn = h('span', { title: '關閉', style: { cursor: 'pointer', fontSize: '18px', lineHeight: '1' },
+      onclick: () => window.__FUNNOW__.toggle() }, '✕');
     const head = h('div', { style: C.head }, [
       h('span', {}, 'FUNNOW 一鍵上架 ' + CONFIG.VERSION), closeBtn]);
 
@@ -728,7 +728,7 @@
   function makeDraggable(el, handle) {
     let sx, sy, ox, oy, drag = false;
     handle.addEventListener('mousedown', (e) => {
-      if (e.target.tagName === 'SPAN' && e.target.textContent === '—') return;
+      if (e.target.tagName === 'SPAN' && e.target.textContent === '✕') return;
       drag = true; sx = e.clientX; sy = e.clientY;
       const r = el.getBoundingClientRect(); ox = r.left; oy = r.top;
       el.style.right = 'auto'; el.style.bottom = 'auto';
@@ -897,7 +897,7 @@
     }
     try {
       const url = CONFIG.CSV_URL + (CONFIG.CSV_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
-      const res = await fetch(url, { credentials: 'omit' });
+      const res = await fetch(url, { credentials: 'omit', cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const text = await res.text();
       STATE.allRows = rowsToObjects(parseCSV(text)).filter((r) => r.store && r.project);
