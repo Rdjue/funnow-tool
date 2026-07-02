@@ -24,7 +24,7 @@
       minute: '00',
     },
 
-    VERSION: 'v1.3.0',
+    VERSION: 'v1.4.0',
   };
 
   /* 若已載入過，直接切換顯示 / 隱藏面板 */
@@ -38,6 +38,10 @@
    * ================================================================== */
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const norm = (t) => String(t || '').replace(/\s+/g, '').trim();
+  // 比對用正規化：統一全形冒號/間隔號、去掉截斷符號
+  const keyNorm = (s) => norm(s)
+    .replace(/[：]/g, ':').replace(/[・･]/g, '·')
+    .replace(/[…]+$/, '').replace(/\.{2,}$/, '');
 
   const isVisible = (el) => {
     if (!el || !el.isConnected) return false;
@@ -324,6 +328,89 @@
   const openCyclicDialog = () => openAddDialog('循環設定');
   const openSpecialDialog = () => openAddDialog('特殊設定');
 
+  /* ---- 批次用：自動儲存、關閉彈窗、切換專案/館別 ---- */
+  const channelFromImgs = (imgs) => {
+    const s = imgs.join(' ').toLowerCase();
+    const fn = /funnow\.svg/.test(s), fb = /funbook\.svg/.test(s);
+    if (fn && fb) return '都有';
+    if (fn) return 'funnow';
+    if (fb) return '官網';
+    return '';
+  };
+
+  async function autoSaveDialog(root) {
+    const btn = visible('button, .v-btn', root || document).find((b) => norm(b.textContent) === '儲存')
+      || visible('button, .v-btn').find((b) => norm(b.textContent) === '儲存');
+    if (!btn) { stashOverlayHTML(getEditorRoot()); throw new Error('找不到「儲存」按鈕（自動儲存失敗）'); }
+    await safeClick(btn, 900);
+    const closed = await waitFor(() => (hasNameInput(getEditorRoot()) ? null : true), 8000);
+    if (!closed) throw new Error('按了儲存但表單沒關閉（可能有錯誤或必填未過，請檢查）');
+    await sleep(400);
+    return true;
+  }
+
+  async function closeAnyDialog() {
+    for (let i = 0; i < 4; i++) {
+      const ovs = visible('.v-overlay__content, [role="dialog"]').filter((o) => !o.closest('#fn-panel'));
+      if (!ovs.length) return true;
+      const ov = ovs[ovs.length - 1];
+      const btn = visible('button, .v-btn', ov).find((b) => norm(b.textContent) === '取消')
+        || ov.querySelector('.close-icon')
+        || visible('button, .v-btn', ov).find((b) => /close|關閉|cancel/i.test((b.className || '') + b.innerHTML));
+      if (btn) await safeClick(btn, 500);
+      else { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true })); await sleep(400); }
+    }
+    return !visible('.v-overlay__content, [role="dialog"]').filter((o) => !o.closest('#fn-panel')).length;
+  }
+
+  async function switchProject(project, channel) {
+    const activator = document.querySelector('.base-select .v-field')
+      || document.querySelector('.base-select')
+      || (projectSelectionEl() && projectSelectionEl().closest('.v-field'));
+    if (!activator) throw new Error('找不到專案選擇框');
+    await safeClick(activator, 700);
+    const menu = await waitFor(() => {
+      const lists = visible('.v-overlay__content .v-list, .v-list, [role="listbox"]').filter((l) => !l.closest('#fn-panel'));
+      return lists.find((l) => l.querySelector('.v-list-item, [role="option"]')) || null;
+    }, 6000);
+    if (!menu) { stashOverlayHTML(visible('.v-overlay__content').filter((o) => !o.closest('#fn-panel')).pop()); throw new Error('專案清單沒展開'); }
+    const items = [...menu.querySelectorAll('.v-list-item, [role="option"]')].filter(isVisible);
+    const want = keyNorm(project);
+    const cands = items.filter((it) => { const t = keyNorm(it.textContent); return t.includes(want) || want.includes(t); });
+    const target = cands.find((it) => {
+      const ch = channelFromImgs([...it.querySelectorAll('img')].map((i) => i.getAttribute('src') || ''));
+      return !channel || channel === '(未填)' || ch === channel;
+    }) || cands[0];
+    if (!target) { stashOverlayHTML(menu); throw new Error('清單找不到專案：' + project + '（' + channel + '）'); }
+    await safeClick(target, 1000);
+    await waitFor(() => { const n = keyNorm(detectProjectName()); return n === want || n.includes(want) ? true : null; }, 5000);
+  }
+
+  const storeCore = (s) => keyNorm(s).replace(/^蟬說[:：]?/, '');
+  const storeMatches = (store) => {
+    const cur = keyNorm(detectStore());
+    return cur.includes(storeCore(store)) || storeCore(store).includes(cur.replace(/^蟬說[:：]?/, ''));
+  };
+  async function switchStore(store) {
+    const storeBtn = document.querySelector('header [aria-haspopup="menu"]')
+      || [...document.querySelectorAll('header button')].filter(isVisible).pop();
+    if (!storeBtn) throw new Error('找不到館別選單按鈕');
+    await safeClick(storeBtn, 700);
+    const sw = await waitFor(() => visible('*').find((el) => !el.closest('#fn-panel') && norm(el.textContent) === '切換分店' && el.children.length <= 1), 5000);
+    if (!sw) { stashOverlayHTML(visible('.v-overlay__content').pop()); throw new Error('找不到「切換分店」'); }
+    await safeClick(sw, 900);
+    const core = store.replace(/^蟬說\s*[：:]\s*/, '').trim();
+    const search = await waitFor(() => visible('input').find((i) => /店名|分店|搜尋/.test(i.getAttribute('placeholder') || '')), 5000);
+    if (search) { setInputValue(search, core); await sleep(1000); }
+    const target = await waitFor(() => {
+      const chooses = visible('button, .v-btn').filter((b) => norm(b.textContent) === '選擇');
+      return chooses.find((b) => { const box = b.closest('div'); const t = box ? keyNorm(box.textContent) : ''; return t.includes(keyNorm(store)) || t.includes(keyNorm(core)); }) || null;
+    }, 6000);
+    if (!target) { stashOverlayHTML(visible('.v-overlay__content').pop()); throw new Error('切換分店清單找不到：' + store); }
+    await safeClick(target, 1500);
+    await waitFor(() => (keyNorm(detectStore()).includes(keyNorm(core)) ? true : null), 8000);
+  }
+
   /* ================================================================== *
    *  填「循環設定」（平日 / 假日）—— 沿用平日.txt 邏輯，改為吃 config
    * ================================================================== */
@@ -540,8 +627,17 @@
     steps: [],         // 目前選定群組要做的時段 config 陣列
     stepIndex: 0,
     running: false,
+    mode: 'step',      // step | project | store | full
     lastOverlayHTML: '', // 最近一次開視窗失敗時的彈窗 HTML（供診斷）
   };
+
+  // 某館別底下所有 專案+頻道 群組
+  function projectGroupsOf(store) {
+    const groups = [];
+    const s = STATE.tree[store] || {};
+    Object.keys(s).forEach((project) => Object.keys(s[project]).forEach((channel) => groups.push({ project, channel })));
+    return groups;
+  }
 
   function buildTree(rows) {
     const tree = {};
@@ -688,25 +784,33 @@
 
     UI.detectBtn = h('button', { style: Object.assign({}, C.btn, C.btnGray), onclick: autoDetect }, '🔍 自動偵測');
     UI.startBtn = h('button', { style: C.btn, onclick: onStart }, '▶ 開始');
-    UI.nextBtn = h('button', { style: C.btn, onclick: onNext }, '下一步 ▶');
-    UI.skipBtn = h('button', { style: Object.assign({}, C.btn, C.btnGray), onclick: onSkip }, '略過此步');
-    UI.retryBtn = h('button', { style: Object.assign({}, C.btn, C.btnGray), onclick: onRetry }, '重填此步');
     UI.reloadBtn = h('button', { style: Object.assign({}, C.btn, C.btnGray), onclick: loadData }, '↻ 重新載入主檔');
     UI.diagBtn = h('button', { style: Object.assign({}, C.btn, { background: '#2c7be5' }), onclick: showDiag }, '🩺 匯出診斷');
+    UI.gate = h('div', { style: { marginTop: '6px' } });
+
+    UI.modeSel = h('select', { style: C.sel });
+    [['step', '逐步確認（每格我手動存）'],
+     ['project', '專案確認（自動存，每專案停）'],
+     ['store', '館別確認（自動跑完整館，換館停）'],
+     ['full', '全自動（含跨館別，不停）']].forEach(([v, t]) => UI.modeSel.appendChild(h('option', { value: v }, t)));
+    UI.modeSel.value = STATE.mode;
+    UI.modeSel.addEventListener('change', () => { STATE.mode = UI.modeSel.value; updateStartBtn(); });
 
     UI.storeSel.addEventListener('change', () => { fillProjects(); refreshSteps(); });
     UI.projSel.addEventListener('change', () => { fillChannels(); refreshSteps(); });
     UI.chanSel.addEventListener('change', refreshSteps);
 
     const body = h('div', { style: C.body }, [
+      h('div', { text: '模式', style: { fontWeight: '700' } }), UI.modeSel,
       h('div', { text: '館別', style: { fontWeight: '700' } }), UI.storeSel,
       h('div', { text: '專案', style: { fontWeight: '700' } }), UI.projSel,
       h('div', { text: '頻道', style: { fontWeight: '700' } }), UI.chanSel,
       UI.detectBtn,
       h('hr', { style: { margin: '10px 0', border: '0', borderTop: '1px solid #eee' } }),
-      h('div', { text: '要建立的時段', style: { fontWeight: '700' } }),
+      h('div', { text: '要建立的時段（目前選定群組）', style: { fontWeight: '700' } }),
       UI.steps,
-      h('div', { style: { marginTop: '6px' } }, [UI.startBtn, UI.nextBtn, UI.skipBtn, UI.retryBtn]),
+      h('div', { style: { marginTop: '6px' } }, [UI.startBtn]),
+      UI.gate,
       h('div', { style: { marginTop: '6px' } }, [UI.reloadBtn, UI.diagBtn]),
       UI.log,
     ]);
@@ -721,7 +825,7 @@
     document.body.appendChild(wrap);
     UI.wrap = wrap;
     UI.body = body;
-    setPhase('idle');
+    updateStartBtn();
     return wrap;
   }
 
@@ -783,7 +887,7 @@
         UI.steps.appendChild(h('div', { id: 'fn-step-' + i, style: { padding: '3px 0' } }, '☐ ' + desc));
       });
     }
-    setPhase('idle');
+    updateStartBtn();
   }
 
   function markStep(i, symbol) {
@@ -791,83 +895,112 @@
     if (el) el.textContent = symbol + ' ' + el.textContent.replace(/^.\s/, '');
   }
 
-  /* --- 階段控制：顯示哪些按鈕 --- */
-  function setPhase(phase) {
-    const show = (el, on) => { el.style.display = on ? 'inline-block' : 'none'; };
-    if (phase === 'idle') {
-      show(UI.startBtn, STATE.steps.length > 0); show(UI.nextBtn, false);
-      show(UI.skipBtn, false); show(UI.retryBtn, false);
-    } else if (phase === 'waitSave') {
-      show(UI.startBtn, false); show(UI.nextBtn, true);
-      show(UI.skipBtn, true); show(UI.retryBtn, true);
-    } else if (phase === 'busy') {
-      show(UI.startBtn, false); show(UI.nextBtn, false);
-      show(UI.skipBtn, false); show(UI.retryBtn, false);
-    } else if (phase === 'done') {
-      show(UI.startBtn, false); show(UI.nextBtn, false);
-      show(UI.skipBtn, false); show(UI.retryBtn, false);
-    }
+  /* --- 啟用/停用「開始」 --- */
+  function canStart() {
+    if (!Object.keys(STATE.tree).length) return false;
+    if (STATE.mode === 'step') return currentRows().length > 0;
+    if (STATE.mode === 'project') return !!UI.storeSel.value && projectGroupsOf(UI.storeSel.value).length > 0;
+    return true; // store / full：主檔非空即可
   }
+  function setEngineButtons(running) {
+    if (UI.startBtn) UI.startBtn.style.display = running ? 'none' : (canStart() ? 'inline-block' : 'none');
+    if (!running && UI.gate) UI.gate.innerHTML = '';
+  }
+  function updateStartBtn() { if (!STATE.running) setEngineButtons(false); }
+
+  /* --- 閘門：暫停並等使用者點按鈕，回傳動作 --- */
+  let gateResolve = null;
+  function gate(kind, msg) {
+    let buttons;
+    if (kind === 'slot') buttons = [['下一步 ▶', 'next'], ['略過此步', 'skip', 1], ['重填此步', 'retry', 1]];
+    else if (kind === 'error') buttons = [['重填此步', 'retry'], ['略過此步', 'skip', 1], ['停止', 'stop', 1]];
+    else buttons = [['繼續 ▶', 'next'], ['停止', 'stop', 1]];
+    return new Promise((resolve) => {
+      gateResolve = resolve;
+      UI.gate.innerHTML = '';
+      UI.gate.appendChild(h('div', { style: { margin: '4px 0', color: '#c53f37', fontWeight: '700' } }, msg));
+      buttons.forEach(([label, val, gray]) =>
+        UI.gate.appendChild(h('button', { style: Object.assign({}, C.btn, gray ? C.btnGray : {}), onclick: () => resolveGate(val) }, label)));
+    });
+  }
+  function resolveGate(v) { if (gateResolve) { const r = gateResolve; gateResolve = null; UI.gate.innerHTML = ''; r(v); } }
 
   /* ================================================================== *
-   *  流程控制
+   *  批次執行引擎（依模式在不同層級暫停）
    * ================================================================== */
-  async function runStep(i) {
-    const st = STATE.steps[i];
-    setPhase('busy');
-    markStep(i, '⏳');
-    log(`開始第 ${i + 1}/${STATE.steps.length} 步：${st.name}（${st.type === 'cyclic' ? '循環' : '特殊'}）`);
+  async function runEngine() {
+    if (STATE.running) return;
+    const mode = STATE.mode;
+    STATE.running = true;
+    setEngineButtons(true);
     try {
-      if (st.type === 'cyclic') {
-        const root = await openCyclicDialog();
-        await fillCyclic(root, st);
-      } else {
-        const root = await openSpecialDialog();
-        await fillSpecial(root, st);
+      const stores = (mode === 'store' || mode === 'full') ? Object.keys(STATE.tree) : [UI.storeSel.value];
+      for (let si = 0; si < stores.length; si++) {
+        const store = stores[si];
+        if (!store) continue;
+        if (mode === 'store' || mode === 'full') {
+          await closeAnyDialog();
+          if (!storeMatches(store)) { log('🏨 切換館別 → ' + store); await switchStore(store); }
+        }
+        const groups = (mode === 'step')
+          ? [{ project: UI.projSel.value, channel: UI.chanSel.value }]
+          : projectGroupsOf(store);
+        for (let pi = 0; pi < groups.length; pi++) {
+          const { project, channel } = groups[pi];
+          const slots = ((STATE.tree[store] && STATE.tree[store][project] && STATE.tree[store][project][channel]) || []).map(toStepConfig);
+          if (!slots.length) continue;
+          if (mode !== 'step') { await closeAnyDialog(); log(`📁 切換專案 → ${project}（${channel}）`); await switchProject(project, channel); }
+          log(`▶ 專案「${project}／${channel}」：${slots.length} 個時段`);
+          for (let ki = 0; ki < slots.length; ki++) {
+            const slot = slots[ki];
+            let redo = true;
+            while (redo) {
+              redo = false;
+              try {
+                if (mode === 'step') markStep(ki, '⏳');
+                else await closeAnyDialog();
+                const root = slot.type === 'cyclic' ? await openCyclicDialog() : await openSpecialDialog();
+                await (slot.type === 'cyclic' ? fillCyclic : fillSpecial)(root, slot);
+                if (mode === 'step') {
+                  markStep(ki, '✍');
+                  const act = await gate('slot', `【${slot.name}】已填好：檢查 → 按頁面「儲存」→ 按〔下一步〕`);
+                  if (act === 'retry') { await closeAnyDialog(); redo = true; continue; }
+                  if (act === 'skip') { markStep(ki, '⏭'); break; }
+                  if (act === 'stop') throw new Error('__STOP__');
+                  markStep(ki, '✅');
+                } else {
+                  await autoSaveDialog(root);
+                  log(`【${slot.name}】已自動儲存 ✓`, 'ok');
+                }
+              } catch (e) {
+                if ((e && e.message) === '__STOP__') throw e;
+                log('錯誤：' + (e && e.message || e), 'err');
+                const act = await gate('error', `這一步（${slot.name}）出錯，要怎麼做？`);
+                if (act === 'retry') { await closeAnyDialog(); redo = true; continue; }
+                if (act === 'stop') throw new Error('__STOP__');
+                if (mode === 'step') markStep(ki, '⚠'); // skip
+              }
+            }
+          }
+          if (mode === 'project') { const a = await gate('boundary', `✅ 已完成專案「${project}」，確認後按〔繼續〕做下一個`); if (a === 'stop') throw new Error('__STOP__'); }
+        }
+        if (mode === 'store') { const a = await gate('boundary', `✅ 已完成館別「${store}」，確認後按〔繼續〕切換下一館`); if (a === 'stop') throw new Error('__STOP__'); }
       }
-      markStep(i, '✍');
-      log(`【${st.name}】已填好，請「檢查後按頁面的『儲存』」，存好後點〔下一步〕。`, 'ok');
-      setPhase('waitSave');
+      log('🎉 批次完成！', 'ok');
     } catch (e) {
-      markStep(i, '⚠');
-      log('錯誤：' + (e && e.message || e), 'err');
-      log('可調整後按〔重填此步〕，或〔略過此步〕。', 'err');
-      setPhase('waitSave');
+      log((e && e.message) === '__STOP__' ? '⏹ 已停止。' : ('引擎中止：' + (e && e.message || e)), 'err');
     }
+    STATE.running = false;
+    setEngineButtons(false);
   }
 
-  function onStart() { STATE.stepIndex = 0; runStep(0); }
-  function onNext() {
-    // 提醒是否已存
-    if (getEditorRoot()) {
-      log('偵測到編輯視窗仍開著；若已存好可忽略，否則請先按頁面「儲存」。', 'err');
-    }
-    markStep(STATE.stepIndex, '✅');
-    STATE.stepIndex++;
-    if (STATE.stepIndex >= STATE.steps.length) {
-      log('🎉 全部完成！可切換下一個專案，重新〔開始〕。', 'ok');
-      setPhase('done');
-      return;
-    }
-    runStep(STATE.stepIndex);
-  }
-  function onSkip() {
-    markStep(STATE.stepIndex, '⏭');
-    log('已略過第 ' + (STATE.stepIndex + 1) + ' 步。');
-    STATE.stepIndex++;
-    if (STATE.stepIndex >= STATE.steps.length) { log('🎉 全部處理完畢。', 'ok'); setPhase('done'); return; }
-    runStep(STATE.stepIndex);
-  }
-  function onRetry() { runStep(STATE.stepIndex); }
+  function onStart() { runEngine(); }
 
   /* --- 自動偵測 --- */
   function autoDetect() {
     const store = detectStore(), proj = detectProjectName(), chan = detectChannel();
     log(`偵測：館別「${store || '?'}」／專案「${proj || '?'}」／頻道「${chan || '?'}」`);
     // 嘗試在下拉中比對（用「包含」寬鬆比對）
-    const keyNorm = (s) => norm(s)
-      .replace(/[：]/g, ':').replace(/[・･]/g, '·')  // 全形冒號、間隔號統一
-      .replace(/[…]+$/, '').replace(/\.{2,}$/, '');   // 去掉截斷符號
     const pick = (sel, want) => {
       if (!want) return false;
       const w = keyNorm(want);
