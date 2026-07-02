@@ -24,7 +24,7 @@
       minute: '00',
     },
 
-    VERSION: 'v1.4.2',
+    VERSION: 'v1.4.3',
   };
 
   /* 若已載入過，直接切換顯示 / 隱藏面板 */
@@ -67,6 +67,17 @@
     el.scrollIntoView({ block: 'center', inline: 'center' });
     await sleep(80);
     el.click();
+    await sleep(wait);
+    return true;
+  };
+
+  // 紮實點擊：完整滑鼠事件序列（有些 Vuetify 按鈕 .click() 不夠）
+  const firmClick = async (el, wait = 500) => {
+    if (!el) return false;
+    el.scrollIntoView({ block: 'center', inline: 'center' });
+    await sleep(80);
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach((t) =>
+      el.dispatchEvent(new MouseEvent(t, { bubbles: true })));
     await sleep(wait);
     return true;
   };
@@ -313,18 +324,16 @@
       modal = got.modal;
     }
 
+    // 等清單彈窗穩定，並「先」記錄它的 HTML（就算之後關閉，診斷也留得住）
+    await sleep(500);
+    modal = findModal() || modal;
+    STATE.lastOverlayHTML = dumpEl(modal, 3800);
     // 點清單彈窗內的「＋」
     const addBtn = findAddButton(modal);
-    if (!addBtn) {
-      stashOverlayHTML(modal);
-      throw new Error('找不到「' + label + '」視窗內的＋新增鈕');
-    }
-    await safeClick(addBtn, 900);
+    if (!addBtn) throw new Error('找不到「' + label + '」視窗內的＋新增鈕（已把清單HTML記入診斷）');
+    await firmClick(addBtn, 700);
     root = await waitFor(() => (hasNameInput(getEditorRoot()) ? getEditorRoot() : null), 10000);
-    if (!root) {
-      stashOverlayHTML(findModal() || visible('.v-overlay__content').filter((o) => !o.closest('#fn-panel')).pop());
-      throw new Error('點＋後仍找不到新增表單');
-    }
+    if (!root) throw new Error('點＋後仍找不到新增表單（已把清單HTML記入診斷，請按🩺匯出診斷）');
     return root;
   }
 
@@ -348,7 +357,7 @@
     await safeClick(btn, 900);
     const closed = await waitFor(() => (hasNameInput(getEditorRoot()) ? null : true), 8000);
     if (!closed) throw new Error('按了儲存但表單沒關閉（可能有錯誤或必填未過，請檢查）');
-    await sleep(400);
+    await sleep(1200); // 等「儲存成功」提示與頁面重繪完成
     return true;
   }
 
