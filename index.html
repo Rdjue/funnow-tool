@@ -59,17 +59,17 @@
 <body>
 <header>
   <h1>FUNNOW 一鍵上架工具</h1>
-  <div class="sub">自動填入平日／假日／特殊設定，每步暫停由你確認後儲存</div>
-  <div class="badge">工具版本 v1.3.0 ・ 最後更新 2026-07-02</div>
+  <div class="sub">自動填入平日／假日／特殊設定 ・ 可單一專案、整館或全自動 ・ 最後更新 2026-07-02</div>
+  <div class="badge">四種模式：逐步 / 專案 / 館別 / 全自動</div>
 </header>
 
 <div class="wrap">
 
   <div class="ok">
     <strong>這個工具能做什麼？</strong><br>
-    在 FUNNOW 後台的專案頁按一下書籤，它會依「線上主檔」的設定值，自動幫你把
-    <b>循環設定（平日／假日）</b> 和 <b>特殊設定</b> 一路填好。每填好一個時段會<b>停住</b>，
-    讓你檢查沒問題後，自己按 FUNNOW 的「儲存」。
+    在 FUNNOW 後台按一下書籤，它會依「線上主檔」的設定值，自動幫你把每個專案的
+    <b>循環設定（平日／假日）</b> 與 <b>特殊設定</b> 填好。<br>
+    可以只做<b>一個專案</b>，也可以一鍵跑完<b>整個館別</b>、甚至<b>所有館別</b>——依你選的「模式」而定（見第 2 節）。
   </div>
 
   <h2><span class="n">1</span>安裝書籤（只做一次）</h2>
@@ -90,33 +90,54 @@
       用滑鼠<strong>拖曳到書籤列</strong>，就會自動變成書籤（不同瀏覽器不一定支援，不行就用上面複製貼上的方式）。</div>
   </div>
 
-  <h2><span class="n">2</span>每天怎麼用</h2>
+  <h2><span class="n">2</span>先選「模式」</h2>
   <div class="card">
-    <div class="step"><div class="dot">1</div><div>在 FUNNOW 後台選好 <b>館別 → 專案</b>，停在該<b>專案頁</b>即可。</div></div>
-    <div class="step"><div class="dot">2</div><div>按書籤 <span class="pill">FUNNOW一鍵上架</span> → 畫面右下角出現操作面板。</div></div>
-    <div class="step"><div class="dot">3</div><div>面板會自動判讀目前的<b>館別／專案／頻道</b>，並列出「要建立的時段」。<br>
-      若沒自動帶出，就用面板上三個下拉選單手動選。</div></div>
-    <div class="step"><div class="dot">4</div><div>按 <span class="pill">▶ 開始</span> → 自動打開「循環設定」並填好 <b>平日</b> → <b>停住</b>。</div></div>
-    <div class="step"><div class="dot">5</div><div><b>檢查畫面沒問題</b> → 按 FUNNOW 頁面上的「<b>儲存</b>」。</div></div>
-    <div class="step"><div class="dot">6</div><div>回面板按 <span class="pill">下一步 ▶</span> → 自動填 <b>假日</b> → 檢查 → 儲存 → 下一步 → <b>特殊</b> → 檢查 → 儲存。</div></div>
-    <div class="step"><div class="dot">7</div><div>顯示完成 → 換下一個專案，重複第 2～6 步。</div></div>
+    <p>按書籤後，面板最上方有「<b>模式</b>」下拉，共四種。<b>差別在於「做多少」與「誰按儲存」</b>：</p>
+    <table>
+      <tr><th>模式</th><th>它會做什麼</th><th>在哪裡開始</th><th>儲存</th></tr>
+      <tr><td><b>逐步確認</b></td><td>只做「目前這一個專案」</td><td>停在該<b>專案</b>頁</td><td>你手動按</td></tr>
+      <tr><td><b>專案確認</b></td><td>自動做完「目前館別的所有專案」，每個專案做完停一下</td><td>該<b>館別</b>任一專案頁</td><td>自動存</td></tr>
+      <tr><td><b>館別確認</b></td><td>自動做完「所有館別」（自動換館別），每換一館停一下</td><td>任何頁面</td><td>自動存</td></tr>
+      <tr><td><b>全自動</b></td><td>自動做完所有館別與專案，中途不停</td><td>任何頁面</td><td>自動存</td></tr>
+    </table>
+    <div class="warn">
+      ⚠️ <b>「專案／館別／全自動」會自動儲存到真實後台</b>（不會再一格一格問你）。
+      執行前請先確認主檔資料正確；不確定時，先用「<b>逐步確認</b>」一個專案試跑、親手把關。
+    </div>
+    <p style="color:var(--muted);font-size:13px;margin:8px 0 0">面板會依你選的模式，只顯示需要填的欄位（逐步：館別＋專案＋頻道；專案：只選館別；館別／全自動：免選），並在下方顯示該模式的說明。</p>
+  </div>
+
+  <h2><span class="n">3</span>操作流程</h2>
+  <div class="card">
+    <div class="step"><div class="dot">1</div><div>依模式站到起點（見上表「在哪裡開始」）：逐步→該專案頁；專案→該館別任一專案頁；館別／全自動→任何頁面皆可。</div></div>
+    <div class="step"><div class="dot">2</div><div>按書籤 <span class="pill">FUNNOW一鍵上架</span> → 右下角出現面板。</div></div>
+    <div class="step"><div class="dot">3</div><div>最上方「<b>模式</b>」下拉選你要的模式。</div></div>
+    <div class="step"><div class="dot">4</div><div>（逐步／專案模式）確認館別／專案／頻道有正確帶出，沒有就用下拉手動選。</div></div>
+    <div class="step"><div class="dot">5</div><div>按 <span class="pill">▶ 開始</span>。</div></div>
+    <div class="step"><div class="dot">6</div><div>
+      <b>逐步模式</b>：每個時段填好會<b>停住</b> → 你檢查 → 按 FUNNOW 頁面「<b>儲存</b>」→ 按面板 <span class="pill">下一步 ▶</span>。<br>
+      <b>自動模式</b>：自動填＋自動存；在「每個專案之間／每個館別之間」會停一下 → 你確認 → 按面板 <span class="pill">繼續 ▶</span>。（全自動則完全不停）
+    </div></div>
+    <div class="step"><div class="dot">7</div><div>面板顯示「🎉 批次完成」即結束。</div></div>
 
     <div class="ok" style="margin-top:16px">
-      ✅ <b>不用特意切換到「列表」檢視</b>——只要停在該專案頁下，工具就能正常運作。
+      ✅ <b>不用特意切換到「列表」檢視</b>——停在專案頁即可。工具也會自動判讀目前的館別／專案／頻道。
     </div>
 
     <p style="margin:14px 0 4px"><b>面板按鈕說明：</b></p>
     <table>
       <tr><th>按鈕</th><th>用途</th></tr>
-      <tr><td>下一步 ▶</td><td>這一步存好了，進到下一個時段</td></tr>
-      <tr><td>略過此步</td><td>跳過目前這個時段</td></tr>
-      <tr><td>重填此步</td><td>這步填錯或出錯，重來一次</td></tr>
+      <tr><td>▶ 開始</td><td>依目前模式開始執行</td></tr>
+      <tr><td>下一步 ▶</td><td>（逐步）這格存好了，做下一個時段</td></tr>
+      <tr><td>繼續 ▶</td><td>（自動）確認後繼續下一個專案／館別</td></tr>
+      <tr><td>略過此步 / 重填此步</td><td>跳過、或重做目前這一步</td></tr>
+      <tr><td>停止</td><td>中止整個批次</td></tr>
       <tr><td>↻ 重新載入主檔</td><td>主檔（Google Sheet）改過後，按這個抓最新資料</td></tr>
       <tr><td>🩺 匯出診斷</td><td>出問題時按它，把產生的文字回傳窗口協助排查</td></tr>
     </table>
   </div>
 
-  <h2><span class="n">3</span>資料主檔（Google Sheet）</h2>
+  <h2><span class="n">4</span>資料主檔（Google Sheet）</h2>
   <div class="card">
     <p>工具要填的所有設定值（價格、星期、日期、特殊場次…）都放在這份線上主檔：</p>
     <p>🔗 <a href="https://docs.google.com/spreadsheets/d/1oerEEw3MB65_qKRB2q1B9Da8T0POEjO73NrOf41lXZs/edit?gid=0#gid=0" target="_blank">FUNNOW 上架主檔（Google Sheet）</a></p>
@@ -130,12 +151,14 @@
     </div>
   </div>
 
-  <h2><span class="n">4</span>注意事項</h2>
+  <h2><span class="n">5</span>注意事項</h2>
   <div class="card">
     <ul>
-      <li><b>一定要自己看過再按「儲存」</b>：工具只負責幫你把欄位填好，存檔由你確認，避免填錯直接上架。</li>
-      <li><b>工具有更新時</b>：先把後台頁面按 <kbd>F5</kbd> 重新整理，再按書籤，才會載到最新版本。</li>
-      <li><b>出問題時</b>：按面板的「🩺 匯出診斷」，把文字回傳窗口，就能快速協助排查。</li>
+      <li><b>自動模式會直接存到真實後台</b>：專案／館別／全自動不會再逐格詢問，執行前務必確認主檔正確；第一次或不確定時，先用「逐步確認」試跑。</li>
+      <li><b>逐步模式一定要自己看過再按「儲存」</b>：工具只負責填欄位，存檔由你把關。</li>
+      <li><b>執行中請勿手動點畫面</b>：自動模式進行時，讓它自己跑，避免干擾。</li>
+      <li><b>工具有更新時</b>：先把後台頁面按 <kbd>F5</kbd> 重新整理，再按書籤（書籤會自動抓最新版）。</li>
+      <li><b>出問題時</b>：按面板的「🩺 匯出診斷」，把文字回傳窗口，就能快速協助排查。若卡在某個視窗，先別關掉再按診斷。</li>
       <li>本頁網址固定，內容更新後看同一個網址即可。</li>
     </ul>
   </div>
