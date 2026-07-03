@@ -24,7 +24,7 @@
       minute: '00',
     },
 
-    VERSION: 'v1.5.2',
+    VERSION: 'v1.6.0',
   };
 
   /* 若已載入過，直接切換顯示 / 隱藏面板 */
@@ -135,6 +135,7 @@
     '類型': 'type', '時段名稱': 'name', '價格': 'price',
     '星期': 'days', '開始日': 'startDate', '結束日': 'endDate',
     '時': 'hour', '分': 'minute', '特殊場次': 'sessions',
+    '時間': 'time', '預訂上限': 'limit',
   };
 
   function rowsToObjects(rows) {
@@ -181,21 +182,40 @@
       .filter(Boolean);
   }
 
+  // 解析「時間」欄：一個或多個 HH:MM（也接受純時 HH），以 ; ；, 換行 分隔
+  function parseTimes(cell) {
+    if (!cell) return [];
+    return cell.split(/[;；,\n]+/).map((s) => s.trim()).filter(Boolean).map((tok) => {
+      const m = tok.match(/(\d{1,2})[:：]?(\d{1,2})?/);
+      if (!m) return null;
+      return { hour: String(Number(m[1])), minute: (m[2] || '00').padStart(2, '0') };
+    }).filter(Boolean);
+  }
+
   /* 把一列主檔轉成填表用 config */
   function toStepConfig(row) {
     const type = /特殊/.test(row.type) ? 'special' : 'cyclic';
+    const limit = (row.limit && /\d/.test(row.limit)) ? String(row.limit).replace(/[^\d]/g, '') : '';
     const base = {
       type,
       name: row.name || (type === 'special' ? '特殊' : '時段'),
       price: (row.price || '').replace(/[,\s]/g, ''),
+      limit,
     };
     if (type === 'cyclic') {
+      // 場次時間：優先用「時間」欄（可多個）；否則沿用舊「時/分」；再否則預設
+      let times = parseTimes(row.time);
+      if (!times.length) {
+        times = row.hour
+          ? [{ hour: String(Number(row.hour)), minute: (row.minute || '00').padStart(2, '0') }]
+          : [{ hour: String(Number(CONFIG.DEFAULTS.hour)), minute: CONFIG.DEFAULTS.minute.padStart(2, '0') }];
+      }
       return Object.assign(base, {
         days: parseDays(row.days, row.name),
         startDate: row.startDate || CONFIG.DEFAULTS.startDate,
         endDate: row.endDate || CONFIG.DEFAULTS.endDate,
-        hour: String(Number(row.hour || CONFIG.DEFAULTS.hour)),
-        minute: (row.minute || CONFIG.DEFAULTS.minute).padStart(2, '0'),
+        times,
+        hour: times[0].hour, minute: times[0].minute, // 相容舊欄位
       });
     }
     return Object.assign(base, { sessions: parseSessions(row.sessions) });
@@ -534,18 +554,97 @@
       if (cfg.days.includes(day) !== isActive(b)) { b.click(); await sleep(350); }
     }
 
-    // 場次時間
+    // 切到「場次」模式
     const sessionLabel = [...root.querySelectorAll('label'), ...document.querySelectorAll('label')]
       .find((el) => el.textContent.trim().includes('場次'));
     if (sessionLabel) { await safeClick(sessionLabel, 500); }
 
-    const timeActivator = document.querySelector('[data-testid="date-picker__activator"]');
-    if (!timeActivator) throw new Error('找不到場次時間 activator');
-    await safeClick(timeActivator, 500);
+    const times = (cfg.times && cfg.times.length) ? cfg.times : [{ hour: cfg.hour, minute: cfg.minute }];
+    if (times.length <= 1) {
+      // 單一場次（沿用原本作法）
+      const timeActivator = document.querySelector('[data-testid="date-picker__activator"]');
+      if (!timeActivator) throw new Error('找不到場次時間 activator');
+      await safeClick(timeActivator, 500);
+      await pickTime('hour', times[0].hour);
+      await pickTime('minute', times[0].minute);
+      await confirmInOverlay('[data-type="hour"]');
+    } else {
+      // 多場次：逐列設定，必要時按「新增時段」
+      await setCyclicSessionTimes(root, times);
+    }
 
-    await pickTime('hour', cfg.hour);
-    await pickTime('minute', cfg.minute);
-    await confirmInOverlay('[data-type="hour"]');
+    // 進階設定：方案預訂上限（留空＝不限制，不動）
+    await fillBookingLimit(root, cfg.limit);
+  }
+
+  /* 循環：設定多個場次時間（每列一個時間，缺列就按「新增時段」） */
+  async function setCyclicSessionTimes(root, times) {
+    const getRows = () => [...root.querySelectorAll('.wd-mb-4.wd-flex')].filter((r) => r.querySelector('[data-testid="date-picker__activator"]'));
+    const addRow = async () => {
+      const before = getRows().length;
+      const addBtn = visible('button, .v-btn', root).find((e) => norm(e.textContent).includes('新增時段'));
+      if (!addBtn) throw new Error('循環：找不到「新增時段」按鈕');
+      await safeClick(addBtn, 800);
+      await waitFor(() => getRows().length > before, 5000);
+    };
+    const setRow = async (index, t) => {
+      const row = getRows()[index];
+      if (!row) throw new Error('循環：找不到第 ' + (index + 1) + ' 個場次列');
+      const activator = row.querySelector('[data-testid="date-picker__activator"]');
+      const before = activator.textContent.trim();
+      if (activator.getAttribute('aria-expanded') !== 'true') await safeClick(activator, 600);
+      const menuId = activator.getAttribute('aria-owns');
+      const picker = await waitFor(() => {
+        const el = menuId ? document.getElementById(menuId) : null;
+        return el && isVisible(el) && el.querySelector('[data-type="hour"]') ? el : null;
+      }, 5000) || document;
+      const pick = async (kind, val) => {
+        const c = picker.querySelector(`[data-type="${kind}"]`);
+        if (!c) throw new Error('循環場次：找不到 ' + kind);
+        const el = [...c.querySelectorAll('[data-value]')].find((n) => n.getAttribute('data-value') === String(Number(val)) && n.getAttribute('disabled') !== 'true');
+        if (!el) throw new Error(`循環場次：找不到 ${kind}:${val}`);
+        await safeClick(el, 300);
+      };
+      await pick('hour', t.hour);
+      await pick('minute', t.minute);
+      const cbtn = visible('button, .v-btn', picker).find((e) => norm(e.textContent) === '確認')
+        || visible('button, .v-btn').find((e) => norm(e.textContent) === '確認');
+      if (cbtn) await safeClick(cbtn, 700);
+      await waitFor(() => { const x = activator.textContent.trim(); return x && x !== before ? x : null; }, 3000);
+    };
+    await setRow(0, times[0]);
+    for (let i = 1; i < times.length; i++) {
+      if (getRows().length <= i) await addRow();
+      await setRow(i, times[i]);
+    }
+  }
+
+  /* 進階設定：方案預訂上限（limit 空＝不限制；有數字＝限制數量+填入） */
+  async function fillBookingLimit(root, limit) {
+    if (!limit) return;
+    const expanded = () => visible('*', root).some((el) => norm(el.textContent) === '方案預訂上限') || !!root.querySelector('input[placeholder="請輸入數量"]');
+    if (!expanded()) {
+      const adv = [...root.querySelectorAll('*')].find((el) => norm(el.textContent) === '進階設定' && el.children.length <= 1);
+      if (adv) await safeClick(adv.closest('button, [class*="title"], [class*="header"], .v-expansion-panel-title') || adv, 600);
+      await waitFor(expanded, 3000);
+    }
+    let numInput = root.querySelector('input[placeholder="請輸入數量"]');
+    if (!numInput) {
+      // 開「方案預訂上限」下拉 → 選「限制數量」
+      const label = visible('*', root).find((el) => norm(el.textContent) === '方案預訂上限');
+      const scope = (label && label.parentElement) || root;
+      const activator = [...scope.querySelectorAll('.v-select .v-field, [role="combobox"], .v-field')].filter(isVisible)[0]
+        || [...root.querySelectorAll('.v-select .v-field, [role="combobox"]')].filter(isVisible).pop();
+      if (!activator) { stashOverlayHTML(root); throw new Error('找不到「方案預訂上限」下拉（已記錄HTML）'); }
+      await firmClick(activator, 600);
+      const opt = await waitFor(() => visible('.v-list-item, [role="option"]').find((o) => norm(o.textContent) === '限制數量'), 4000);
+      if (!opt) { stashOverlayHTML(realOverlays().pop() || root); throw new Error('找不到「限制數量」選項（已記錄HTML）'); }
+      await firmClick(opt, 500);
+      numInput = await waitFor(() => root.querySelector('input[placeholder="請輸入數量"]'), 4000);
+    }
+    if (!numInput) { stashOverlayHTML(root); throw new Error('找不到數量輸入框（已記錄HTML）'); }
+    setInputValue(numInput, String(limit));
+    await sleep(200);
   }
 
   /* 時間選擇：點 data-value */
@@ -663,6 +762,9 @@
       if (getRows().length <= i) await addRow();
       await configureRow(i, cfg.sessions[i]);
     }
+
+    // 進階設定：方案預訂上限（留空＝不限制）
+    await fillBookingLimit(root, cfg.limit);
   }
 
   /* ================================================================== *
@@ -674,9 +776,11 @@
     steps: [],         // 目前選定群組要做的時段 config 陣列
     stepIndex: 0,
     running: false,
+    abort: false,      // 使用者按「停止」時設 true
     mode: 'step',      // step | project | store | full
     lastOverlayHTML: '', // 最近一次開視窗失敗時的彈窗 HTML（供診斷）
   };
+  function checkAbort() { if (STATE.abort) throw new Error('__STOP__'); }
 
   // 某館別底下所有 專案+頻道 群組
   function projectGroupsOf(store) {
@@ -831,6 +935,7 @@
 
     UI.detectBtn = h('button', { style: Object.assign({}, C.btn, C.btnGray), onclick: autoDetect }, '🔍 自動偵測');
     UI.startBtn = h('button', { style: C.btn, onclick: onStart }, '▶ 開始');
+    UI.stopBtn = h('button', { style: Object.assign({}, C.btn, { background: '#b02a1e' }), onclick: onStop }, '⏹ 停止');
     UI.reloadBtn = h('button', { style: Object.assign({}, C.btn, C.btnGray), onclick: loadData }, '↻ 重新載入主檔');
     UI.diagBtn = h('button', { style: Object.assign({}, C.btn, { background: '#2c7be5' }), onclick: showDiag }, '🩺 匯出診斷');
     UI.gate = h('div', { style: { marginTop: '6px' } });
@@ -860,7 +965,7 @@
       h('hr', { style: { margin: '10px 0', border: '0', borderTop: '1px solid #eee' } }),
       h('div', { text: '要建立的時段（目前選定群組）', style: { fontWeight: '700' } }),
       UI.steps,
-      h('div', { style: { marginTop: '6px' } }, [UI.startBtn]),
+      h('div', { style: { marginTop: '6px' } }, [UI.startBtn, UI.stopBtn]),
       UI.gate,
       h('div', { style: { marginTop: '6px' } }, [UI.reloadBtn, UI.diagBtn]),
       UI.log,
@@ -972,9 +1077,16 @@
   }
   function setEngineButtons(running) {
     if (UI.startBtn) UI.startBtn.style.display = running ? 'none' : (canStart() ? 'inline-block' : 'none');
+    if (UI.stopBtn) UI.stopBtn.style.display = running ? 'inline-block' : 'none';
     if (!running && UI.gate) UI.gate.innerHTML = '';
   }
   function updateStartBtn() { if (!STATE.running) setEngineButtons(false); }
+  function onStop() {
+    if (!STATE.running) return;
+    STATE.abort = true;
+    log('⏹ 已要求停止：會在目前動作的安全點停下，不會再自動儲存後續。', 'err');
+    if (gateResolve) resolveGate('stop');
+  }
 
   /* --- 閘門：暫停並等使用者點按鈕，回傳動作 --- */
   let gateResolve = null;
@@ -1000,6 +1112,7 @@
     if (STATE.running) return;
     const mode = STATE.mode;
     STATE.running = true;
+    STATE.abort = false;
     setEngineButtons(true);
     try {
       if (mode === 'project' && UI.storeSel.value && !storeMatches(UI.storeSel.value)) {
@@ -1015,6 +1128,7 @@
       for (let si = 0; si < stores.length; si++) {
         const store = stores[si];
         if (!store) continue;
+        checkAbort();
         if (mode === 'store' || mode === 'full') {
           await closeAnyDialog();
           if (!storeMatches(store)) { log('🏨 切換館別 → ' + store); await switchStore(store); }
@@ -1024,6 +1138,7 @@
           : projectGroupsOf(store);
         for (let pi = 0; pi < groups.length; pi++) {
           const { project, channel } = groups[pi];
+          checkAbort();
           const slots = ((STATE.tree[store] && STATE.tree[store][project] && STATE.tree[store][project][channel]) || []).map(toStepConfig);
           if (!slots.length) continue;
           if (mode !== 'step') { await closeAnyDialog(); log(`📁 切換專案 → ${project}（${channel}）`); await switchProject(project, channel); }
@@ -1034,6 +1149,7 @@
             while (redo) {
               redo = false;
               try {
+                checkAbort();
                 if (mode === 'step') markStep(ki, '⏳');
                 const root = slot.type === 'cyclic' ? await openCyclicDialog() : await openSpecialDialog();
                 await (slot.type === 'cyclic' ? fillCyclic : fillSpecial)(root, slot);
@@ -1045,6 +1161,7 @@
                   if (act === 'stop') throw new Error('__STOP__');
                   markStep(ki, '✅');
                 } else {
+                  checkAbort();
                   await autoSaveDialog(root);
                   log(`【${slot.name}】已自動儲存 ✓`, 'ok');
                 }
@@ -1064,9 +1181,12 @@
       }
       log('🎉 批次完成！', 'ok');
     } catch (e) {
-      log((e && e.message) === '__STOP__' ? '⏹ 已停止。' : ('引擎中止：' + (e && e.message || e)), 'err');
+      const stopped = (e && e.message) === '__STOP__';
+      log(stopped ? '⏹ 已停止（未存的視窗已關閉，不會上架）。' : ('引擎中止：' + (e && e.message || e)), 'err');
+      if (stopped) { try { await closeAnyDialog(); } catch (_) {} }
     }
     STATE.running = false;
+    STATE.abort = false;
     setEngineButtons(false);
   }
 
