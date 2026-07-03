@@ -24,7 +24,7 @@
       minute: '00',
     },
 
-    VERSION: 'v1.6.0',
+    VERSION: 'v1.6.1',
   };
 
   /* 若已載入過，直接切換顯示 / 隱藏面板 */
@@ -394,7 +394,7 @@
       const btn = visible('button, .v-btn', ov).find((b) => norm(b.textContent) === '取消')
         || ov.querySelector('.close-icon')
         || visible('button, .v-btn', ov).find((b) => /close|關閉|cancel/i.test((b.className || '') + b.innerHTML));
-      if (btn) await safeClick(btn, 500);
+      if (btn) await firmClick(btn, 500);
       else { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true })); await sleep(400); }
     }
     return !realOverlays().length;
@@ -622,6 +622,7 @@
   /* 進階設定：方案預訂上限（limit 空＝不限制；有數字＝限制數量+填入） */
   async function fillBookingLimit(root, limit) {
     if (!limit) return;
+    const dumpForm = () => { STATE.lastOverlayHTML = dumpEl(root, 8000); };
     const expanded = () => visible('*', root).some((el) => norm(el.textContent) === '方案預訂上限') || !!root.querySelector('input[placeholder="請輸入數量"]');
     if (!expanded()) {
       const adv = [...root.querySelectorAll('*')].find((el) => norm(el.textContent) === '進階設定' && el.children.length <= 1);
@@ -635,14 +636,14 @@
       const scope = (label && label.parentElement) || root;
       const activator = [...scope.querySelectorAll('.v-select .v-field, [role="combobox"], .v-field')].filter(isVisible)[0]
         || [...root.querySelectorAll('.v-select .v-field, [role="combobox"]')].filter(isVisible).pop();
-      if (!activator) { stashOverlayHTML(root); throw new Error('找不到「方案預訂上限」下拉（已記錄HTML）'); }
+      if (!activator) { dumpForm(); throw new Error('找不到「方案預訂上限」下拉（已記錄HTML）'); }
       await firmClick(activator, 600);
       const opt = await waitFor(() => visible('.v-list-item, [role="option"]').find((o) => norm(o.textContent) === '限制數量'), 4000);
-      if (!opt) { stashOverlayHTML(realOverlays().pop() || root); throw new Error('找不到「限制數量」選項（已記錄HTML）'); }
+      if (!opt) { dumpForm(); throw new Error('找不到「限制數量」選項（已記錄HTML）'); }
       await firmClick(opt, 500);
       numInput = await waitFor(() => root.querySelector('input[placeholder="請輸入數量"]'), 4000);
     }
-    if (!numInput) { stashOverlayHTML(root); throw new Error('找不到數量輸入框（已記錄HTML）'); }
+    if (!numInput) { dumpForm(); throw new Error('找不到數量輸入框（已記錄HTML）'); }
     setInputValue(numInput, String(limit));
     await sleep(200);
   }
@@ -1115,6 +1116,8 @@
     STATE.abort = false;
     setEngineButtons(true);
     try {
+      // 乾淨開始：關掉先前殘留（例如上次中止留下）的視窗
+      for (let i = 0; i < 4 && realOverlays().length; i++) await closeAnyDialog();
       if (mode === 'project' && UI.storeSel.value && !storeMatches(UI.storeSel.value)) {
         throw new Error('目前畫面不是「' + UI.storeSel.value + '」館別；「專案確認」不會自動換館別，請先在右上切到該館別再執行');
       }
